@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>가게 장부</title>
+    <!-- Tailwind CSS 연동 -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js 연동 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- 구글 웹 폰트 (Pretendard) 연동 -->
+    <link rel="stylesheet" as="style" crossorigin
+        href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.8/dist/web/static/pretendard-dynamic-subset.css" />
+
+    <style>
+        /* 다크 테마 전체 폰트 및 배경색 설정 */
+        body {
+            font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, sans-serif;
+            font-size: 18px;
+            background-color: #020617;
+            /* 매우 깊은 밤하늘/우주 (slate-950) */
+            color: #e2e8f0;
+            /* 밝은 무채색 텍스트 */
+            -webkit-tap-highlight-color: transparent;
+            background-image:
+                radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.05), transparent 25%),
+                radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.05), transparent 25%);
+            background-attachment: fixed;
+        }
+
+        /* 숫자 입력 스피너 숨기기 */
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+
+        input[type="number"] {
+            -moz-appearance: textfield;
+        }
+
+        /* 다크 테마 탭 버튼 */
+        .tab-btn {
+            color: #64748b;
+            /* 슬레이트 500 */
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+
+        .tab-btn::after {
+            content: '';
+            position: absolute;
+            bottom: -3px;
+            left: 50%;
+            width: 0;
+            height: 3px;
+            background-color: #818cf8;
+            /* 네온 인디고 */
+            box-shadow: 0 0 10px #818cf8;
+            /* 글로우 효과 */
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform: translateX(-50%);
+        }
+
+        .tab-btn.active {
+            color: #e0e7ff;
+            /* 매우 밝은 인디고 */
+            font-weight: 700;
+        }
+
+        .tab-btn.active::after {
+            width: 100%;
+        }
+
+        /* 애니메이션 */
+        .tab-content {
+            display: none;
+            animation: slideInUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        @keyframes slideInUp {
+            from {
+                opacity: 0;
+                transform: translateY(15px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* 다크 테마 입력 필드 (유리 질감) */
+        input[type="date"],
+        input[type="number"],
+        input[type="month"] {
+            background-color: rgba(30, 41, 59, 0.7);
+            /* slate-800 반투명 */
+            color: #f8fafc;
+            transition: all 0.2s ease-in-out;
+            border: 1px solid #334155;
+            /* slate-700 */
+            backdrop-filter: blur(8px);
+        }
+
+        input[type="date"]::-webkit-calendar-picker-indicator,
+        input[type="month"]::-webkit-calendar-picker-indicator {
+            filter: invert(1);
+            /* 달력 아이콘 하얗게 */
+            cursor: pointer;
+        }
+
+        input[type="date"]:focus,
+        input[type="number"]:focus,
+        input[type="month"]:focus {
+            border-color: #818cf8;
+            box-shadow: 0 0 15px rgba(129, 140, 248, 0.3);
+            /* 포커스 시 네온 빛 */
+            outline: none;
+        }
+
+        /* 고급스러운 토스트 알림창 */
+        #toast {
+            visibility: hidden;
+            min-width: 300px;
+            background: rgba(15, 23, 42, 0.9);
+            /* 다크 슬레이트 */
+            backdrop-filter: blur(10px);
+            border: 1px solid #334155;
+            color: #e2e8f0;
+            text-align: center;
+            border-radius: 16px;
+            padding: 16px 24px;
+            position: fixed;
+            z-index: 100;
+            left: 50%;
+            bottom: 40px;
+            transform: translateX(-50%) translateY(20px);
+            font-size: 1.125rem;
+            font-weight: 600;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+
+        #toast.show {
+            visibility: visible;
+            opacity: 1;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* 커스텀 스크롤바 (다크 테마) */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+
+<body class="pb-32">
+
+    <!-- 상단 헤더 (우주 느낌의 다크 그라데이션) -->
+    <header
+        class="bg-gradient-to-b from-[#020617] to-[#0f172a] text-white p-6 text-center sticky top-0 z-30 border-b border-slate-800 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
+        <h1
+            class="text-3xl font-extrabold tracking-widest flex items-center justify-center gap-3 text-slate-100 drop-shadow-md">
+            <span class="text-indigo-400">🌌</span> O N P O I N T <span class="text-purple-400">✨</span>
+        </h1>
+        <p class="text-slate-400 text-sm mt-2 font-medium tracking-wide">스페이스 다크 에디션</p>
+    </header>
+
+    <!-- 상단 탭 네비게이션 (글래스모피즘 효과) -->
+    <nav class="flex bg-slate-900/80 backdrop-blur-md shadow-lg sticky top-[97px] z-20 border-b border-slate-800">
+        <button onclick="switchTab('tab-input')" class="tab-btn active flex-1 py-5 text-lg text-center font-semibold"
+            id="btn-tab-input">오늘 정산</button>
+        <button onclick="switchTab('tab-report')" class="tab-btn flex-1 py-5 text-lg text-center font-semibold"
+            id="btn-tab-report">월간 분석</button>
+        <button onclick="switchTab('tab-chart')" class="tab-btn flex-1 py-5 text-lg text-center font-semibold"
+            id="btn-tab-chart">방문 추이</button>
+    </nav>
+
+    <!-- 메인 컨텐츠 영역 -->
+    <main class="max-w-3xl mx-auto p-4 mt-6">
+
+        <!-- ==============================================
+             [탭 1] 오늘 정산 입력
+        =============================================== -->
+        <section id="tab-input"
+            class="tab-content active bg-slate-900 border border-slate-800 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden">
+            <!-- 배경 장식 (은은한 빛) -->
+            <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500/10 rounded-full blur-[80px] pointer-events-none">
+            </div>
+
+            <div class="mb-8 relative z-10">
+                <label for="input-date" class="block text-xl font-bold text-slate-300 mb-3 flex items-center gap-2">
+                    <span class="text-indigo-400 text-2xl">📅</span> 영업일 선택
+                </label>
+                <input type="date" id="input-date" onchange="loadDataForDate()"
+                    class="w-full p-5 rounded-2xl text-xl font-semibold tracking-wider">
+            </div>
+
+            <div class="mb-8 relative z-10">
+                <h2 class="text-xl font-bold text-slate-300 mb-4 flex items-center gap-2">
+                    <span class="text-indigo-400 text-2xl">⏳</span> 시간대별 기록
+                </h2>
+                <div
+                    class="bg-slate-800/50 border border-slate-700/50 p-4 rounded-xl mb-6 text-sm text-slate-400 font-medium flex items-center gap-3">
+                    <span class="text-lg">💡</span>
+                    <span>숫자 입력 시 키패드가 활성화됩니다. 정확한 기록을 남겨주세요.</span>
+                </div>
+                <!-- 시간대별 입력 폼 -->
+                <div id="hourly-inputs-container" class="flex flex-col gap-4">
+                    <!-- JS로 자동 생성됨 -->
+                </div>
+            </div>
+
+            <hr class="my-8 border-slate-800 relative z-10">
+
+            <div class="mb-10 relative z-10">
+                <label for="input-expense" class="block text-xl font-bold text-slate-300 mb-3 flex items-center gap-2">
+                    <span class="text-rose-400 text-2xl">💸</span> 금일 총 지출액
+                </label>
+                <div class="relative">
+                    <input type="number" id="input-expense" placeholder="0"
+                        class="w-full p-6 pr-16 rounded-2xl text-3xl font-extrabold text-right bg-slate-800/80 text-rose-300 border-slate-700 focus:border-rose-500/50 focus:shadow-[0_0_15px_rgba(244,63,94,0.2)]">
+                    <span
+                        class="absolute right-6 top-1/2 transform -translate-y-1/2 text-xl font-bold text-slate-500">원</span>
+                </div>
+            </div>
+
+            <!-- 하단 고정 저장 버튼 (우주 성운 느낌의 그라데이션) -->
+            <button onclick="saveDailyData()"
+                class="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 bg-[length:200%_auto] hover:bg-right hover:shadow-[0_0_20px_rgba(139,92,246,0.4)] text-white font-extrabold text-2xl py-6 rounded-2xl transition-all duration-500 active:scale-[0.98] relative z-10 border border-indigo-400/30">
+                데이터 저장 및 동기화
+            </button>
+        </section>
+
+        <!-- ==============================================
+             [탭 2] 이달의 리포트
+        =============================================== -->
+        <section id="tab-report"
+            class="tab-content bg-slate-900 border border-slate-800 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden">
+            <div
+                class="absolute bottom-0 left-0 w-80 h-80 bg-purple-500/10 rounded-full blur-[100px] pointer-events-none">
+            </div>
+
+            <div class="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+                <label for="report-month" class="text-xl font-bold text-slate-300 flex items-center gap-2">
+                    <span class="text-indigo-400 text-2xl">🗓️</span> 조회 월 선택
+                </label>
+                <input type="month" id="report-month" onchange="generateReport()"
+                    class="p-4 rounded-xl text-xl font-bold text-center w-full sm:w-56 tracking-wider">
+            </div>
+
+            <!-- 요약 카드 (다크 네온 스타일) -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-5 mb-8 relative z-10">
+                <!-- 총 매출 -->
+                <div
+                    class="bg-slate-800/80 p-6 rounded-[1.5rem] border border-slate-700 shadow-inner flex flex-col justify-between relative overflow-hidden group">
+                    <div
+                        class="absolute top-4 right-4 text-indigo-400/20 text-6xl group-hover:scale-110 transition-transform duration-500">
+                        💰</div>
+                    <span class="text-sm font-semibold text-slate-400 mb-2 uppercase tracking-widest">총 수입</span>
+                    <span id="report-total-sales"
+                        class="text-4xl font-extrabold text-indigo-300 tracking-tight drop-shadow-md">0 원</span>
+                </div>
+                <!-- 총 지출 -->
+                <div
+                    class="bg-slate-800/80 p-6 rounded-[1.5rem] border border-slate-700 shadow-inner flex flex-col justify-between relative overflow-hidden group">
+                    <div
+                        class="absolute top-4 right-4 text-rose-400/20 text-6xl group-hover:scale-110 transition-transform duration-500">
+                        💸</div>
+                    <span class="text-sm font-semibold text-slate-400 mb-2 uppercase tracking-widest">총 지출</span>
+                    <span id="report-total-expense"
+                        class="text-4xl font-extrabold text-rose-300 tracking-tight drop-shadow-md">0 원</span>
+                </div>
+                <!-- 순이익 (강조된 우주 그라데이션) -->
+                <div
+                    class="bg-gradient-to-br from-[#1e1b4b] to-[#312e81] p-8 rounded-[2rem] border border-indigo-500/30 shadow-[0_0_30px_rgba(79,70,229,0.15)] md:col-span-2 flex flex-col items-center justify-center text-center relative overflow-hidden">
+                    <div
+                        class="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')] opacity-50">
+                    </div>
+                    <span class="text-sm font-bold text-indigo-200/80 mb-3 uppercase tracking-[0.2em] relative z-10">순수익</span>
+                    <span id="report-net-profit"
+                        class="text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-fuchsia-200 drop-shadow-[0_2px_10px_rgba(255,255,255,0.1)] relative z-10">0
+                        원</span>
+                </div>
+            </div>
+
+            <!-- 텍스트 분석 요약 -->
+            <div class="bg-slate-800/50 p-8 rounded-[2rem] border border-slate-700/50 relative z-10 backdrop-blur-sm">
+                <h3 class="text-xl font-bold text-slate-200 mb-6 flex items-center gap-2">
+                    <span class="text-purple-400 text-2xl">🪐</span> 데이터 인사이트
+                </h3>
+                <ul class="space-y-4">
+                    <li class="flex items-center bg-slate-900/80 p-5 rounded-2xl border border-slate-700">
+                        <div class="bg-indigo-900/50 p-3 rounded-full border border-indigo-500/30 mr-4">
+                            <span class="text-2xl block">👥</span>
+                        </div>
+                        <div class="flex-1">
+                            <span class="text-xs text-slate-400 uppercase tracking-widest font-bold block mb-1">Peak
+                                Day</span>
+                            <div id="report-best-day" class="text-indigo-300 font-extrabold text-xl">-</div>
+                        </div>
+                    </li>
+                    <li class="flex items-start bg-slate-900/80 p-5 rounded-2xl border border-slate-700">
+                        <div class="bg-amber-900/30 p-3 rounded-full border border-amber-500/30 mr-4">
+                            <span class="text-2xl block">🔥</span>
+                        </div>
+                        <div class="w-full">
+                            <span class="text-xs text-slate-400 uppercase tracking-widest font-bold block mb-3">Rush
+                                Hours Top 3</span>
+                            <div id="report-top-times" class="space-y-2">
+                                <!-- JS로 채워짐 -->
+                            </div>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </section>
+
+        <!-- ==============================================
+             [탭 3] 방문 추이 그래프
+        =============================================== -->
+        <section id="tab-chart"
+            class="tab-content bg-slate-900 border border-slate-800 p-8 rounded-[2rem] shadow-2xl relative overflow-hidden">
+            <div
+                class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[120%] h-64 bg-indigo-600/5 rounded-[100%] blur-[50px] pointer-events-none">
+            </div>
+
+            <div class="mb-8 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 relative z-10">
+                <label for="chart-month" class="text-xl font-bold text-slate-300 flex items-center gap-2">
+                    <span class="text-indigo-400 text-2xl">📈</span> 통계 범위
+                </label>
+                <input type="month" id="chart-month" onchange="drawChart()"
+                    class="p-4 rounded-xl text-xl font-bold text-center w-full sm:w-56 tracking-wider">
+            </div>
+
+            <div class="mb-8 text-center relative z-10">
+                <h3 class="text-lg font-bold text-slate-300 mb-1">시간대별 트래픽 분포</h3>
+                <p class="text-sm text-slate-500">해당 월의 시간대별 평균 방문객 수치입니다.</p>
+            </div>
+
+            <!-- 그래프 캔버스 (다크 테마 최적화) -->
+            <div class="relative w-full h-96 bg-slate-950/50 rounded-2xl p-4 border border-slate-800 shadow-inner z-10">
+                <canvas id="visitorsChart"></canvas>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- 알림 메시지 (Toast) -->
+    <div id="toast">✅ 시스템에 안전하게 기록되었습니다.</div>
+
+    <!-- JavaScript 로직 -->
+    <script>
+        // 로컬 스토리지 키
+        const STORAGE_KEY = 'family_shop_data_space_dark';
+        let chartInstance = null;
+
+        // 1. 초기화 (페이지 로드 시)
+        document.addEventListener('DOMContentLoaded', () => {
+            initHourlyInputs();
+
+            const today = new Date();
+            const offset = today.getTimezoneOffset() * 60000;
+            const dateOffset = new Date(today.getTime() - offset);
+            const todayString = dateOffset.toISOString().split('T')[0];
+            const currentMonth = todayString.substring(0, 7);
+
+            document.getElementById('input-date').value = todayString;
+            document.getElementById('report-month').value = currentMonth;
+            document.getElementById('chart-month').value = currentMonth;
+
+            loadDataForDate();
+        });
+
+        // 2. 탭 전환 기능
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById(`btn-${tabId}`).classList.add('active');
+
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+
+            if (tabId === 'tab-report') {
+                document.getElementById('report-month').value = document.getElementById('input-date').value.substring(0, 7);
+                generateReport();
+            } else if (tabId === 'tab-chart') {
+                document.getElementById('chart-month').value = document.getElementById('input-date').value.substring(0, 7);
+                drawChart();
+            }
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // 3. 시간대별 입력칸 생성 (다크 테마 디자인)
+        function initHourlyInputs() {
+            const container = document.getElementById('hourly-inputs-container');
+            let html = '';
+
+            for (let i = 0; i <= 23; i++) {
+                const startTime = i.toString().padStart(2, '0');
+                const endTime = (i + 1).toString().padStart(2, '0');
+                // 지그재그 배경 처리
+                const bgClass = i % 2 === 0 ? 'bg-slate-800/60' : 'bg-slate-800/30';
+
+                html += `
+                    <div class="${bgClass} border border-slate-700/50 p-5 rounded-2xl flex flex-col md:flex-row md:items-center gap-5 transition-colors hover:bg-slate-800 hover:border-slate-600">
+                        <div class="font-bold text-slate-300 text-lg md:w-1/4 flex items-center gap-2 font-mono">
+                            <span class="w-2 h-2 rounded-full bg-indigo-500 shadow-[0_0_8px_#6366f1]"></span>
+                            ${startTime}:00 - ${endTime}:00
+                        </div>
+                        <div class="flex gap-4 flex-1">
+                            <!-- 손님 수 입력 -->
+                            <div class="flex-1 relative">
+                                <label class="block text-xs text-slate-500 mb-1 font-bold pl-1 uppercase tracking-wider">Visitor</label>
+                                <input type="number" id="cust-${i}" placeholder="0" class="w-full p-4 pr-10 rounded-xl text-xl text-right font-bold bg-slate-900/80 text-indigo-300 border border-slate-700 focus:border-indigo-500 focus:shadow-[0_0_10px_rgba(99,102,241,0.2)]">
+                                <span class="absolute right-4 bottom-4 text-slate-500 font-bold text-sm">명</span>
+                            </div>
+                            <!-- 매출액 입력 -->
+                            <div class="flex-1 relative">
+                                <label class="block text-xs text-slate-500 mb-1 font-bold pl-1 uppercase tracking-wider">Revenue</label>
+                                <input type="number" id="sales-${i}" placeholder="0" class="w-full p-4 pr-10 rounded-xl text-xl text-right font-bold bg-slate-900/80 text-emerald-300 border border-slate-700 focus:border-emerald-500 focus:shadow-[0_0_10px_rgba(16,185,129,0.2)]">
+                                <span class="absolute right-4 bottom-4 text-slate-500 font-bold text-sm">원</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+        }
+
+        // 4. 공통 헬퍼
+        function getAllData() {
+            return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+        }
+
+        function formatMoney(num) {
+            return Number(num).toLocaleString('ko-KR');
+        }
+
+        function showToast(message) {
+            const toast = document.getElementById('toast');
+            toast.innerText = message;
+            toast.classList.add('show');
+            setTimeout(() => { toast.classList.remove('show'); }, 2500);
+        }
+
+        // 5. 정산 저장
+        function saveDailyData() {
+            const dateStr = document.getElementById('input-date').value;
+            if (!dateStr) {
+                alert("날짜를 선택해주세요.");
+                return;
+            }
+
+            const data = getAllData();
+            const dailyData = {
+                expense: Number(document.getElementById('input-expense').value) || 0,
+                hourly: {}
+            };
+
+            for (let i = 0; i <= 23; i++) {
+                const customers = Number(document.getElementById(`cust-${i}`).value) || 0;
+                const sales = Number(document.getElementById(`sales-${i}`).value) || 0;
+                dailyData.hourly[i] = { customers, sales };
+            }
+
+            data[dateStr] = dailyData;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+            showToast("✅ 시스템에 안전하게 기록되었습니다.");
+        }
+
+        // 6. 데이터 불러오기
+        function loadDataForDate() {
+            const dateStr = document.getElementById('input-date').value;
+            const data = getAllData();
+            const dailyData = data[dateStr];
+
+            document.getElementById('input-expense').value = '';
+            for (let i = 0; i <= 23; i++) {
+                document.getElementById(`cust-${i}`).value = '';
+                document.getElementById(`sales-${i}`).value = '';
+            }
+
+            if (dailyData) {
+                document.getElementById('input-expense').value = dailyData.expense || '';
+                if (dailyData.hourly) {
+                    for (let i = 0; i <= 23; i++) {
+                        if (dailyData.hourly[i]) {
+                            const cust = dailyData.hourly[i].customers;
+                            const sales = dailyData.hourly[i].sales;
+                            document.getElementById(`cust-${i}`).value = cust === 0 ? '' : cust;
+                            document.getElementById(`sales-${i}`).value = sales === 0 ? '' : sales;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 7. 리포트 생성 (다크 테마 적용)
+        function generateReport() {
+            const monthStr = document.getElementById('report-month').value;
+            if (!monthStr) return;
+
+            const data = getAllData();
+            let totalSales = 0;
+            let totalExpense = 0;
+
+            const dayCustomerCount = [0, 0, 0, 0, 0, 0, 0];
+            const dayOperationCount = [0, 0, 0, 0, 0, 0, 0];
+            const hourlyCustomerCount = {};
+            for (let i = 0; i <= 23; i++) hourlyCustomerCount[i] = 0;
+
+            for (const [dateKey, dailyData] of Object.entries(data)) {
+                if (dateKey.startsWith(monthStr)) {
+                    totalExpense += (dailyData.expense || 0);
+
+                    const dayOfWeek = new Date(dateKey).getDay();
+                    let dailyTotalCustomers = 0;
+
+                    if (dailyData.hourly) {
+                        for (let i = 0; i <= 23; i++) {
+                            if (dailyData.hourly[i]) {
+                                totalSales += (dailyData.hourly[i].sales || 0);
+                                const cust = dailyData.hourly[i].customers || 0;
+                                dailyTotalCustomers += cust;
+                                hourlyCustomerCount[i] += cust;
+                            }
+                        }
+                    }
+                    dayCustomerCount[dayOfWeek] += dailyTotalCustomers;
+                    dayOperationCount[dayOfWeek] += 1;
+                }
+            }
+
+            const netProfit = totalSales - totalExpense;
+            document.getElementById('report-total-sales').innerText = `${formatMoney(totalSales)} 원`;
+            document.getElementById('report-total-expense').innerText = `${formatMoney(totalExpense)} 원`;
+
+            const profitEl = document.getElementById('report-net-profit');
+            const profitTitle = profitEl.previousElementSibling;
+
+            if (netProfit < 0) {
+                profitTitle.innerText = '⚠️ DEFICIT (적자)';
+                profitTitle.classList.replace('text-indigo-200/80', 'text-rose-400');
+                profitEl.innerText = `${formatMoney(netProfit)} 원`;
+                profitEl.className = "text-5xl md:text-6xl font-black text-rose-500 drop-shadow-[0_2px_10px_rgba(244,63,94,0.3)] relative z-10 tracking-tight";
+            } else {
+                profitTitle.innerText = 'NET PROFIT';
+                profitTitle.classList.replace('text-rose-400', 'text-indigo-200/80');
+                profitEl.innerText = `+ ${formatMoney(netProfit)} 원`;
+                profitEl.className = "text-5xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-indigo-200 to-purple-200 drop-shadow-[0_2px_10px_rgba(255,255,255,0.1)] relative z-10 tracking-tight";
+            }
+
+            const dayNames = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+            let bestDayIndex = -1;
+            let maxAvgCustomers = -1;
+
+            for (let i = 0; i < 7; i++) {
+                if (dayOperationCount[i] > 0) {
+                    const avg = dayCustomerCount[i] / dayOperationCount[i];
+                    if (avg > maxAvgCustomers) {
+                        maxAvgCustomers = avg;
+                        bestDayIndex = i;
+                    }
+                }
+            }
+
+            const bestDayText = bestDayIndex !== -1
+                ? `${dayNames[bestDayIndex]} <span class="text-slate-500 text-sm ml-2 font-normal">(Avg. ${Math.round(maxAvgCustomers)} 명)</span>`
+                : '데이터 부족';
+            document.getElementById('report-best-day').innerHTML = bestDayText;
+
+            const sortedHours = Object.keys(hourlyCustomerCount).map(hour => {
+                return { hour: parseInt(hour), count: hourlyCustomerCount[hour] };
+            }).sort((a, b) => b.count - a.count);
+
+            const topTimesContainer = document.getElementById('report-top-times');
+            topTimesContainer.innerHTML = '';
+
+            let hasData = false;
+            for (let i = 0; i < 3; i++) {
+                if (sortedHours[i] && sortedHours[i].count > 0) {
+                    hasData = true;
+                    // 다크 테마에 맞는 색상 지정 (1등 금, 2등 은, 3등 동 느낌의 다크버전)
+                    const bgClass = i === 0 ? 'bg-amber-900/20 border-amber-500/30' :
+                        i === 1 ? 'bg-slate-800/80 border-slate-600' : 'bg-slate-800/40 border-slate-700';
+                    const textColor = i === 0 ? 'text-amber-400' : 'text-slate-300';
+                    const badgeClass = i === 0 ? 'bg-amber-500 text-amber-950 shadow-[0_0_10px_rgba(245,158,11,0.3)]' : 'bg-slate-700 text-slate-300';
+                    const medal = i === 0 ? '🥇' : (i === 1 ? '🥈' : '🥉');
+
+                    const html = `
+                        <div class="${bgClass} border p-3 rounded-xl flex justify-between items-center">
+                            <span class="font-bold ${textColor} flex items-center gap-2 font-mono">
+                                ${medal} ${sortedHours[i].hour.toString().padStart(2, '0')}:00
+                            </span>
+                            <span class="${badgeClass} px-3 py-1 rounded-lg font-bold text-sm">
+                                ${sortedHours[i].count} 명
+                            </span>
+                        </div>
+                    `;
+                    topTimesContainer.innerHTML += html;
+                }
+            }
+
+            if (!hasData) {
+                topTimesContainer.innerHTML = '<p class="text-slate-500 text-sm italic">기록이 존재하지 않습니다.</p>';
+            }
+        }
+
+        // 8. 방문 추이 그래프 (Chart.js 다크 모드)
+        function drawChart() {
+            const monthStr = document.getElementById('chart-month').value;
+            if (!monthStr) return;
+
+            const data = getAllData();
+
+            const hourlyTotals = {};
+            for (let i = 0; i <= 23; i++) hourlyTotals[i] = 0;
+            let totalDaysWithData = 0;
+
+            for (const [dateKey, dailyData] of Object.entries(data)) {
+                if (dateKey.startsWith(monthStr)) {
+                    let hasDataOnThisDay = false;
+                    if (dailyData.hourly) {
+                        for (let i = 0; i <= 23; i++) {
+                            if (dailyData.hourly[i] && dailyData.hourly[i].customers > 0) {
+                                hourlyTotals[i] += dailyData.hourly[i].customers;
+                                hasDataOnThisDay = true;
+                            }
+                        }
+                    }
+                    if (hasDataOnThisDay) totalDaysWithData++;
+                }
+            }
+
+            const labels = [];
+            const avgData = [];
+            const backgroundColors = [];
+            const borderColors = [];
+
+            let maxVal = -1;
+
+            for (let i = 0; i <= 23; i++) {
+                labels.push(`${i}시`);
+                const avg = totalDaysWithData > 0 ? (hourlyTotals[i] / totalDaysWithData).toFixed(1) : 0;
+                avgData.push(avg);
+                if (Number(avg) > maxVal) maxVal = Number(avg);
+            }
+
+            // 다크 테마 막대 색상
+            for (let i = 0; i < avgData.length; i++) {
+                if (Number(avgData[i]) === maxVal && maxVal > 0) {
+                    backgroundColors.push('rgba(192, 132, 252, 0.8)'); // 핑크퍼플 포인트
+                    borderColors.push('rgba(192, 132, 252, 1)');
+                } else {
+                    backgroundColors.push('rgba(79, 70, 229, 0.5)'); // 은은한 인디고
+                    borderColors.push('rgba(79, 70, 229, 0.8)');
+                }
+            }
+
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            const ctx = document.getElementById('visitorsChart').getContext('2d');
+
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '평균 트래픽',
+                        data: avgData,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        hoverBackgroundColor: borderColors,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { top: 10, bottom: 0, left: 0, right: 0 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.95)', // 다크 툴팁
+                            titleColor: '#94a3b8',
+                            bodyColor: '#f8fafc',
+                            borderColor: '#334155',
+                            borderWidth: 1,
+                            titleFont: { size: 13, family: 'Pretendard' },
+                            bodyFont: { size: 16, weight: 'bold', family: 'Pretendard' },
+                            padding: 12,
+                            displayColors: false,
+                            cornerRadius: 8,
+                            callbacks: {
+                                label: function (context) { return `평균 ${context.parsed.y}명 방문`; }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                font: { size: 12, family: 'Pretendard' },
+                                color: '#64748b',
+                                stepSize: 1,
+                                padding: 8
+                            },
+                            grid: {
+                                color: '#1e293b', // 어두운 그리드선
+                                drawBorder: false
+                            }
+                        },
+                        x: {
+                            ticks: {
+                                font: { size: 12, family: 'Pretendard' },
+                                color: '#64748b',
+                                padding: 8,
+                                maxRotation: 0,
+                                autoSkip: true,
+                                autoSkipPadding: 15
+                            },
+                            grid: { display: false }
+                        }
+                    },
+                    animation: {
+                        duration: 800,
+                        easing: 'easeOutQuart'
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
